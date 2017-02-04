@@ -1,0 +1,16 @@
+{
+    "version": "2.1.5",
+    "compilerOptions": {
+        "module": "umd",
+        "target": "es5",
+        "declaration": true,
+        "outDir": "lib/",
+        "lib": [
+            "es2015"
+        ]
+    },
+    "files": [
+        "./src/test.ts",
+        "./src/index.ts"
+    ]
+}

@@ -1,0 +1,26 @@
+{
+  "name": "@rideshark/graph-datastore",
+  "version": "1.0.0",
+  "description": "A datastore which is inspired by Immutable.JS and Falcor's JSON Graph",
+  "main": "lib/index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/RideShark/graph-datastore.git"
+  },
+  "author": "bryanerayner",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/RideShark/graph-datastore/issues"
+  },
+  "homepage": "https://github.com/RideShark/graph-datastore#readme",
+  "devDependencies": {
+    "@types/chai": "^3.4.34",
+    "@types/mocha": "^2.2.38",
+    "chai": "^3.5.0",
+    "mocha": "^3.2.0",
+    "typescript": "^2.1.5"
+  }
+}
