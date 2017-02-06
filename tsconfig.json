@@ -4,6 +4,7 @@
         "target": "es5",
         "module": "umd",
         "declaration": true,
+        "sourceMap": true,
         "outDir": "lib/",
         "lib": [
             "es2015"

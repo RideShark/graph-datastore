@@ -1,4 +1,7 @@
-// 100% punked from Netflix/falcor-json-graph.
+export function isSentinel(v :any): v is ISentinel {
+    let $type = v ? v.$type : '';
+    return $type === 'ref' || $type === 'atom' || $type ==='error';
+}
 
 export interface ISentinel {
     $type: 'ref' | 'atom' | 'error';
@@ -34,7 +37,7 @@ function sentinel(type: 'ref' | 'atom' | 'error', value?: any, props?: any) {
     }
 }
 
-export function ref(path: string, props) {
+export function ref(path: string[], props?) {
     return sentinel('ref', path, props);
 }
 
