@@ -19,10 +19,12 @@
   "homepage": "https://github.com/RideShark/graph-datastore#readme",
   "devDependencies": {
     "@types/chai": "^3.4.34",
-    "@types/lodash": "^4.14.52",
+    "@types/lodash": "^4.14.54",
     "@types/mocha": "^2.2.38",
+    "@types/sinon": "^1.16.35",
     "chai": "^3.5.0",
     "mocha": "^3.2.0",
+    "sinon": "^1.17.7",
     "typescript": "^2.1.5"
   }
 }
