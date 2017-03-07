@@ -4,13 +4,13 @@
         "module": "umd",
         "target": "es5",
         "declaration": true,
+        "sourceMap": true,
         "outDir": "lib/",
         "lib": [
             "es2015"
         ]
     },
-    "files": [
-        "./src/test.ts",
-        "./src/index.ts"
+    "include": [
+        "src/**/*.spec.ts"
     ]
 }

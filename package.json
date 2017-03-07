@@ -4,7 +4,8 @@
   "description": "A datastore which is inspired by Immutable.JS and Falcor's JSON Graph",
   "main": "lib/index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "pretest": "tsc --p tsconfig.test.json",
+    "test": "mocha lib/**/*.spec.js"
   },
   "repository": {
     "type": "git",
@@ -18,6 +19,7 @@
   "homepage": "https://github.com/RideShark/graph-datastore#readme",
   "devDependencies": {
     "@types/chai": "^3.4.34",
+    "@types/lodash": "^4.14.52",
     "@types/mocha": "^2.2.38",
     "chai": "^3.5.0",
     "mocha": "^3.2.0",
