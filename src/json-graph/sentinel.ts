@@ -75,6 +75,6 @@ export function isExpired(value: ISentinel, dateNow: ()=>number) {
             return false;
         default:
             let now = dateNow();
-            return value.$expires < now;
+            return $expires < now;
     }
 }
