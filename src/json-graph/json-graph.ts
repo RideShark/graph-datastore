@@ -1,4 +1,4 @@
-import { isSentinel } from './sentinel';
+import { isExpired, isSentinel, ISentinel } from './sentinel';
 import {
     cloneDeep
 } from 'lodash';
@@ -31,40 +31,135 @@ export class JsonGraph {
 
     private _data: any = Object.create(null);
 
+    private _pathPrefix: string;
+
     get __data() {
         return this._data;
     }
 
-    constructor() {
+    dateNow() {
+        return Date.now();
+    }
+
+    constructor(pathPrefix: string = '') {
+        this._pathPrefix = pathPrefix;
         this._data = {};
     }
 
     /**
      * Set a value in the path
      */
-    set(path: any[], value: any) {
-        const p = new Path(path);
+    set(path: any[], value: any, pathPrefix = this._pathPrefix) {
+        const p = this._newPath(path, pathPrefix);
         this._innerSet(p.path, value);
     }
 
     /**
-     * Set a value in the path
+     * Get a value synchronously in the path
      */
-    getSync(path: any[]): any {
-        const p = new Path(path);
-        return this._innerGetSync(p.path);
+    getSync(path: any[], defaultValue = undefined): any {
+        const p = this._newPath(path);
+        let v = this._innerGetSync(p.path);
+
+        if (v.isExpired || !v.exists) {
+            return defaultValue;
+        } else {
+            let value = v.value;
+            if (isSentinel(value) && isExpired(value, ()=>this.dateNow())) {
+                return defaultValue
+            }
+            return this._unbox(value);
+        }
     }
 
+    has(path: any[]): any {
+        const p = this._newPath(path);
+        return this._innerGetSync(p.path).exists;
+    }
+
+    /**
+     * Returns a serialized version of the JsonGraph
+     */
+    serialize(): string {
+        return JSON.stringify(
+            {
+                _data: this.__data,
+                _pathPrefix: this._pathPrefix
+            }
+        );
+    }
+
+    /**
+     * Creates a new JsonGraph from a deserialized string
+     * @param input 
+     */
+    static deserialize(input: string): JsonGraph {
+        let data = JSON.parse(input);
+        if (data) {
+            let d = data._data,
+                p = data._pathPrefix;
+            let g = new JsonGraph(p);
+
+            let theData = Object.create(null);
+            Object.assign(theData, d);
+
+            g._setData(theData);
+
+            return g;
+        } else {
+            throw 'No data'
+        }
+    }
+
+    private _unbox(value: any): any {
+        if (isSentinel(value) && value.$type === 'atom') {
+            return value.value;
+        }
+        return value;
+    }
+
+    private _isExpired(value: any | ISentinel) {
+        if (isSentinel(value)) {
+            return isExpired(value, () => this.dateNow());
+        }
+        return false;
+    }
+
+    private _setData(data: any) {
+        this._data = data;
+    }
+
+    private _newPath(path: any[], pathPrefix = this._pathPrefix) {
+        let p = path;
+        if (pathPrefix) {
+            p = [].concat(pathPrefix).concat(path);
+        }
+        return new Path(p);
+    }
 
     private _innerSet(path: IPath, value: any) {
-        let resolvedPath = this._dereferencePath(path);
+        let deref = this._dereferencePath(path);
+        if (deref.isExpired) {
+            throw 'Path expired';
+        }
+        let resolvedPath = deref.path;
         this._makePath(resolvedPath);
         this._setAtPath(resolvedPath, value);
     }
 
-    private _innerGetSync(path: IPath) : any {
-        let resolvedPath = this._dereferencePath(path);
-        return this._getAtPath(resolvedPath);
+    private _innerGetSync(path: IPath): {
+        value: any,
+        exists: boolean,
+        isExpired: boolean
+    } {
+        let deref = this._dereferencePath(path);
+        let isExpired = deref.isExpired;
+        let vals = this._getAtPath(deref.path);
+        return {
+            isExpired: isExpired,
+            value: vals.value,
+            exists: vals.exists
+        }
     }
 
     private _makePath(path: string[]) {
@@ -97,36 +192,61 @@ export class JsonGraph {
         cursor[lastCursor] = value;
     }
 
-    private _getAtPath(path: string[]) {
+    private _getAtPath(path: string[]): {
+        exists: boolean;
+        value: any;
+    } {
+        let exists: boolean = true,
+            value: any;
         var p = [].concat(path);
-        let lastCursor: string = p.pop();
         var cursorIndex, cursor = this._data;
         while (cursorIndex = p.shift()) {
             let nextCursor = cursorIndex + '';
             if (cursor[nextCursor]) {
                 cursor = cursor[nextCursor];
+                exists = true;
+            } else {
+                exists = false;
             }
         }
 
-        return cloneDeep(cursor[lastCursor]);
+        if (exists) {
+            return {
+                value: cloneDeep(cursor),
+                exists
+            }
+        } else {
+            return {
+                value: undefined,
+                exists
+            }
+        }
     }
 
     /**
      * Removes all references from a path, allowing simple modifications.
      */
-    private _dereferencePath(path: IPath) {
+    private _dereferencePath(path: IPath): {
+        path: string[];
+        isExpired: boolean;
+    } {
         let p = [].concat(path);
         let cursor: any, cursorIndex: string;
         cursor = this._data;
-
+        const dateNow = () => this.dateNow();
         let completePath: string[] = [];
+        let pathExpired = false;
 
         // Walk down the path until it's completely walked down.
         while (p.length && (cursorIndex = p.shift() + '')) {
             try {
-                let v = cursor[cursorIndex];
+                let v: any | ISentinel = cursor[cursorIndex];
                 // If this is a reference, we are going to walk down a new path
                 if (isSentinel(v) && v.$type === 'ref') {
+                    if (!pathExpired) {
+                        pathExpired = isExpired(v, dateNow);
+                    }
+
                     // Reset the "complete path", we have started anew at the root.
                     completePath = [];
 
@@ -142,7 +262,7 @@ export class JsonGraph {
                     // We are going to walk down this new path
                     try {
                         cursor = cursor[cursorIndex];
-                    } catch(e) {
+                    } catch (e) {
                     }
                 }
 
@@ -152,7 +272,12 @@ export class JsonGraph {
             }
 
         }
-        return completePath;
+        return {
+            path: completePath,
+            isExpired: pathExpired
+        };
     }
+
+
 
 }

@@ -5,7 +5,9 @@
   "main": "lib/index.js",
   "scripts": {
     "pretest": "tsc --p tsconfig.test.json",
-    "test": "mocha lib/**/*.spec.js"
+    "test": "mocha lib/**/*.spec.js",
+    "export-json-graph": "tsc --p tsconfig.json-graph-umd.json && npm run-script optimize-json-graph-export",
+    "optimize-json-graph-export": "node ./node_modules/requirejs/bin/r.js -o json-graph/build-config.js"
   },
   "repository": {
     "type": "git",
@@ -19,10 +21,14 @@
   "homepage": "https://github.com/RideShark/graph-datastore#readme",
   "devDependencies": {
     "@types/chai": "^3.4.34",
-    "@types/lodash": "^4.14.52",
+    "@types/lodash": "^4.14.54",
     "@types/mocha": "^2.2.38",
+    "@types/sinon": "^1.16.35",
+    "amdclean": "^2.7.0",
     "chai": "^3.5.0",
     "mocha": "^3.2.0",
+    "requirejs": "^2.3.3",
+    "sinon": "^1.17.7",
     "typescript": "^2.1.5"
   }
 }

@@ -2,15 +2,16 @@
     "version": "2.1.5",
     "compilerOptions": {
         "target": "es5",
-        "module": "umd",
+        "module": "amd",
         "declaration": true,
         "sourceMap": true,
-        "outDir": "lib/",
+        "outDir":"json-graph/",
+        "outFile": "json-graph/json-graph.js",
         "lib": [
             "es2015"
         ]
     },
-    "include": [
-        "./src/**/*.spec.ts"
+    "files": [
+        "./src/json-graph/json-graph.ts"
     ]
 }

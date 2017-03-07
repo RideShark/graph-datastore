@@ -6,16 +6,32 @@ export declare class Path {
 }
 export declare class JsonGraph {
     private _data;
+    private _pathPrefix;
     readonly __data: any;
-    constructor();
+    dateNow(): number;
+    constructor(pathPrefix?: string);
     /**
      * Set a value in the path
      */
-    set(path: any[], value: any): void;
+    set(path: any[], value: any, pathPrefix?: string): void;
     /**
-     * Set a value in the path
+     * Get a value synchronously in the path
      */
-    getSync(path: any[]): any;
+    getSync(path: any[], defaultValue?: any): any;
+    has(path: any[]): any;
+    /**
+     * Returns a serialized version of the JsonGraph
+     */
+    serialize(): string;
+    /**
+     * Creates a new JsonGraph from a deserialized string
+     * @param input
+     */
+    static deserialize(input: string): JsonGraph;
+    private _unbox(value);
+    private _isExpired(value);
+    private _setData(data);
+    private _newPath(path, pathPrefix?);
     private _innerSet(path, value);
     private _innerGetSync(path);
     private _makePath(path);
