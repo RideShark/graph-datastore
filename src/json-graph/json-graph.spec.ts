@@ -127,4 +127,32 @@ describe('JsonGraph', ()=>{
 
     });
 
+
+    describe('observe', ()=>{
+
+        const observeValues = (valueStore: any[])=>{
+            return (value: any)=>valueStore.push(value);
+        };
+
+        it('should emit changes when the value in the path changes', ()=>{
+
+            let g = new JsonGraph();
+            g.set([], {
+                A: [0, 'hi']
+            });
+            let emitted = [];
+            g.observe(['A', 1]).subscribe(observeValues(emitted));
+            
+            g.set(['A', 1], 'bye');
+            g.set(['A', 1], 'in the sky');
+            g.set(['A', 1], 'I\'m a monkey');
+            
+            expect(emitted.length).to.equal(4);
+            expect(emitted[0]).to.equal('hi');
+            expect(emitted[1]).to.equal('bye');
+            expect(emitted[2]).to.equal('in the sky');
+            expect(emitted[3]).to.equal('I\'m a monkey');
+        });
+    });
+
 });

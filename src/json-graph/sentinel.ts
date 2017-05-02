@@ -10,7 +10,7 @@ export interface ISentinel {
     /**
      * Unix time of when this was created
      */
-    $timestamp: number;
+    $timestamp?: number;
 
     /**
      * Either:
@@ -18,8 +18,9 @@ export interface ISentinel {
      *  1: This value never expires
      * A unix time: This value is expired when $expires < Date.now();
      */
-    $expires: number;
+    $expires?: number;
 }
+
 
 function sentinel(type: 'ref' | 'atom' | 'error', value?: any, props?: any) {
     var copy = Object.create(null);

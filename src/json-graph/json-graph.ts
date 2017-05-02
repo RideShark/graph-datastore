@@ -1,7 +1,13 @@
-import { isSentinel } from './sentinel';
+import { ISentinel, isSentinel } from './sentinel';
 import {
     cloneDeep
 } from 'lodash';
+
+import {
+    Observable,
+    Subject,
+    Subscriber
+} from 'rxjs';
 
 export type IPath = Array<string | boolean | number | null>;
 
@@ -26,10 +32,77 @@ export class Path {
     private _path: IPath;
 }
 
+/**
+ * IObservedPathChange represents any change in a path.
+ */
+export interface IObservedPathChange {
+
+    /**
+     * The type of change.
+     * valueChange:
+     * This is emitted when the value at the end of the path changes.
+     * If the value does not change, but the references do (thereby causing a change)
+     * this will be emitted _after_ any refChange changes.
+     * 
+     * refChange:
+     * This is emitted when any referenced values change. 
+     * @example
+     *  A[1] is a reference to B[1]. (value at A[1]: {$type:'ref' value: ['B', 1]})
+     *  A[1] changes to {$type: 'ref', value: ['B', 2]}
+     * 
+     * A 'refChange' event will be emitted, noting that A[1]'s reference has changed.
+     * 
+     * pathRemoved:
+     * The path has been entirely removed.
+     * 
+     * @example
+     * A[1] is observed.
+     * Before it can be subscribed to, A is removed from the JSON Graph. As a result, the path A[1] is completely invalidated.
+     * 
+     * When the observable is subscribed to, 'pathRemoved' will be emitted.
+     * pathRemoved is always the last value in an observable of IObservedPathChange.
+     */
+    $type: 'valueChange' | 'refChange' | 'pathRemoved';
+    newValue?: any;
+
+    refChange?: {
+        /**
+         * The path leading up to the point that changed
+         */
+        path: IPath;
+        /**
+         * The old reference which was stored at IPath;
+         */
+        oldRef: IPath;
+
+        /**
+         * The new reference which was stored at IPath;
+         */
+        newRef: IPath;
+    }
+}
+
+const PATH_JOINER = 'ௐ';
+
+function pathsAreEqual(path: any[], otherPath: any[]) {
+    return !!path && !!otherPath && path.length === otherPath.length
+}
 
 export class JsonGraph {
 
     private _data: any = Object.create(null);
+
+    private _pathReferences: {
+        [joinedPath: string]: {
+            [joinedPath: string]: IPath;
+        };
+    };
+
+
+    private _setPaths$ = new Subject<{
+        path: string[],
+        value: any
+    }>();
 
     get __data() {
         return this._data;
@@ -55,6 +128,38 @@ export class JsonGraph {
         return this._innerGetSync(p.path);
     }
 
+    /**
+     * Observe a path change.
+     * @param path The path to observe
+     */
+    observe(path: any[]): Observable<IObservedPathChange> {
+        return new Observable<IObservedPathChange>((subscriber: Subscriber<IObservedPathChange>)=>{
+
+            let originalPath = path,
+                setPaths$ = this._setPaths$,
+                dereferencedPath = this._dereferencePath(path);
+
+
+                let subsc = Observable.merge(
+                    setPaths$.filter(o=>pathsAreEqual(o.path, originalPath)),
+                    setPaths$.filter(o=>pathsAreEqual(o.path, dereferencedPath))
+                ).debounceTime(0).subscribe(next=>{
+                    subscriber.next({
+                        $type: 'valueChange',
+                        newValue: next.value
+                    });
+                }, err=>{
+                    subscriber.error(err);
+                }, ()=>{
+                });
+
+                return {
+                    unsubscribe() {
+                        subsc.unsubscribe();
+                    }
+                };
+        });
+    }
 
     private _innerSet(path: IPath, value: any) {
         let resolvedPath = this._dereferencePath(path);
@@ -93,8 +198,18 @@ export class JsonGraph {
                 cursor = cursor[nextCursor];
             }
         }
-
+        
         cursor[lastCursor] = value;
+
+
+        if (isSentinel(value) && value.$type === 'ref') {
+            this._trackRef(path, value);
+        }
+
+        this._setPaths$.next({
+            path,
+            value
+        });
     }
 
     private _getAtPath(path: string[]) {
@@ -153,6 +268,15 @@ export class JsonGraph {
 
         }
         return completePath;
+    }
+
+    private _trackRef(path: string[], reference: ISentinel) {
+        let joinedPath = path.join(PATH_JOINER);
+        let pathReferences = this._pathReferences;
+        if (!pathReferences[joinedPath]) {
+            pathReferences = {};
+        }
+        pathReferences[joinedPath][reference.value.join(PATH_JOINER)] = [].concat(reference.value);
     }
 
 }

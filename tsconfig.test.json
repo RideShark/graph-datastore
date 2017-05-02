@@ -1,13 +1,14 @@
 {
     "version": "2.1.5",
     "compilerOptions": {
-        "module": "umd",
+        "module": "commonjs",
         "target": "es5",
-        "declaration": true,
+        "declaration": false,
         "sourceMap": true,
         "outDir": "lib/",
         "lib": [
-            "es2015"
+            "es2015",
+            "dom"
         ]
     },
     "include": [

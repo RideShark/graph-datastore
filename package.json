@@ -17,6 +17,9 @@
     "url": "https://github.com/RideShark/graph-datastore/issues"
   },
   "homepage": "https://github.com/RideShark/graph-datastore#readme",
+  "peerDependencies": {
+    "rxjs": "^5.2.0"
+  },
   "devDependencies": {
     "@types/chai": "^3.4.34",
     "@types/lodash": "^4.14.52",
