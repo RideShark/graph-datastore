@@ -147,11 +147,10 @@ describe('JsonGraph', ()=>{
             g.set(['A', 1], 'in the sky');
             g.set(['A', 1], 'I\'m a monkey');
             
-            expect(emitted.length).to.equal(4);
-            expect(emitted[0]).to.equal('hi');
-            expect(emitted[1]).to.equal('bye');
-            expect(emitted[2]).to.equal('in the sky');
-            expect(emitted[3]).to.equal('I\'m a monkey');
+            expect(emitted.length).to.equal(3);
+            expect(emitted[0].newValue).to.equal('bye');
+            expect(emitted[1].newValue).to.equal('in the sky');
+            expect(emitted[2].newValue).to.equal('I\'m a monkey');
         });
     });
 

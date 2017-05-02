@@ -85,7 +85,7 @@ export interface IObservedPathChange {
 const PATH_JOINER = 'ௐ';
 
 function pathsAreEqual(path: any[], otherPath: any[]) {
-    return !!path && !!otherPath && path.length === otherPath.length
+    return !!path && !!otherPath && path.length === otherPath.length && path.join(PATH_JOINER) === otherPath.join(PATH_JOINER);
 }
 
 export class JsonGraph {
@@ -96,7 +96,7 @@ export class JsonGraph {
         [joinedPath: string]: {
             [joinedPath: string]: IPath;
         };
-    };
+    } = {};
 
 
     private _setPaths$ = new Subject<{
@@ -139,11 +139,12 @@ export class JsonGraph {
                 setPaths$ = this._setPaths$,
                 dereferencedPath = this._dereferencePath(path);
 
+                
 
-                let subsc = Observable.merge(
-                    setPaths$.filter(o=>pathsAreEqual(o.path, originalPath)),
-                    setPaths$.filter(o=>pathsAreEqual(o.path, dereferencedPath))
-                ).debounceTime(0).subscribe(next=>{
+
+                let subsc = setPaths$
+                .filter(o=>pathsAreEqual(o.path, dereferencedPath))
+                .subscribe(next=>{
                     subscriber.next({
                         $type: 'valueChange',
                         newValue: next.value
@@ -274,7 +275,7 @@ export class JsonGraph {
         let joinedPath = path.join(PATH_JOINER);
         let pathReferences = this._pathReferences;
         if (!pathReferences[joinedPath]) {
-            pathReferences = {};
+            pathReferences[joinedPath] = {};
         }
         pathReferences[joinedPath][reference.value.join(PATH_JOINER)] = [].concat(reference.value);
     }
