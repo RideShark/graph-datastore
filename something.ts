@@ -12,7 +12,7 @@ describe('JsonGraph', () => {
 
     describe('set', () => {
 
-        it('should work with POJOs', ()=>{
+        it('should work with POJOs', () => {
             let g = new JsonGraph();
             const value = {
                 something: {
@@ -34,7 +34,7 @@ describe('JsonGraph', () => {
 
         it('should work with ref sentinel values', () => {
 
-            let g = new JsonGraph();
+            let g = new JsonGraph('');
 
             g.set(['dataById'], {
                 '1': 'two',
@@ -73,7 +73,7 @@ describe('JsonGraph', () => {
 
         it('should allow values to be set on the root.', () => {
 
-            let g = new JsonGraph();
+            let g = new JsonGraph('');
 
             g.set([], {
                 foo: {
@@ -91,7 +91,7 @@ describe('JsonGraph', () => {
 
         it('should allow deep recursion of references.', () => {
 
-            let g = new JsonGraph();
+            let g = new JsonGraph('');
 
             g.set([], {
                 foo: {
@@ -118,7 +118,7 @@ describe('JsonGraph', () => {
 
         it('should work with ref sentinel values', () => {
 
-            let g = new JsonGraph();
+            let g = new JsonGraph('');
 
             g.set([], {
                 dataById: {
@@ -145,14 +145,13 @@ describe('JsonGraph', () => {
             expect(bees).to.equal('bees');
         });
 
-
         it('should allow the definition of an "undefined" value', () => {
 
             let g = new JsonGraph();
 
             g.set([1], 'four');
 
-            let five = g.getSync([2], {defaultValue: 'five'});
+            let five = g.getSync([2], 'five');
             expect(five).to.equal('five');
         });
 
@@ -180,11 +179,11 @@ describe('JsonGraph', () => {
                 }
             });
 
-            let nope = g.getSync(['users', 4], {defaultValue: 'nope'});
+            let nope = g.getSync(['users', 4], 'nope');
 
             expect(nope).to.equal('nope');
 
-            let niceTry = g.getSync(['users', 4, 'apple'],{defaultValue:  'niceTry'});
+            let niceTry = g.getSync(['users', 4, 'apple'], 'niceTry');
             expect(niceTry).to.equal('niceTry');
 
             let bees = g.getSync(['users', 5, 'apple']);
@@ -239,157 +238,7 @@ describe('JsonGraph', () => {
         });
 
 
-        it('should return undefined for unassigned values', () => {
-            
-            let g = new JsonGraph();
-
-            let value = g.getSync([]);
-            expect(value).to.equal(undefined);
-
-            value = g.getSync(['D', 3, 3, '3']);
-
-            expect(value).to.equal(undefined);
-        });
-
     });
-
-    describe('delete', () => {
-
-        it('should delete values', () => {
-            
-            let g = new JsonGraph();
-
-            g.set([], {
-                dataById: {
-                    '1': 'two',
-                    '3': {
-                        'apple': 'bees',
-                        'knees': 'sneeze'
-                    }
-                },
-                users: {
-                    4: {
-                        data: ref(['dataById', '3'])
-                    }
-                }
-            });
-
-            g.delete(['dataById', 1]);
-
-            let value = g.getSync(['dataById', 1]);
-            expect(value).to.equal(undefined);
-
-            g.delete(['users', 4, 'data']);
-            value = g.getSync(['dataById', 3]);
-
-            expect(value).to.equal(undefined);
-        });
-    });
-
-    describe('observe', () => {
-
-        const observeValues = (valueStore: any[]) => {
-            return (value: any) => valueStore.push(value);
-        };
-
-        it('should emit changes when the value in the path changes', () => {
-
-            let g = new JsonGraph();
-            g.set([], {
-                A: [0, 'hi']
-            });
-            let emitted = [];
-            g.observe(['A', 1]).subscribe(observeValues(emitted));
-
-            g.set(['A', 1], 'bye');
-            g.set(['A', 1], 'in the sky');
-            g.set(['A', 1], 'I\'m a monkey');
-
-            expect(emitted.length).to.equal(4);
-            expect(emitted[0].value).to.equal('hi');
-            expect(emitted[1].value).to.equal('bye');
-            expect(emitted[2].value).to.equal('in the sky');
-            expect(emitted[3].value).to.equal('I\'m a monkey');
-        });
-
-        it('should track changes across references', () => {
-
-            let g = new JsonGraph();
-            g.set([], {
-                A: [0, 'hi'],
-                B: {
-                    $type: 'ref',
-                    value: ['A', 0]
-                }
-            });
-            let emitted = [];
-            g.observe(['B']).subscribe(observeValues(emitted));
-
-            g.set(['A', 0], 'bye');
-            g.set(['A', 0], 'in the sky');
-            g.set(['A', 0], 'I\'m a monkey');
-
-            expect(emitted.length).to.equal(4);
-            expect(emitted[0].value).to.equal(0);
-            expect(emitted[1].value).to.equal('bye');
-            expect(emitted[2].value).to.equal('in the sky');
-            expect(emitted[3].value).to.equal('I\'m a monkey');
-        });
-
-
-        it('should track changes when references change', () => {
-
-            let g = new JsonGraph();
-            g.set([], {
-                D: 'bye',
-                E: 'in the sky',
-                F: 'I\'m a monkey',
-                B: 'init'
-            });
-            let emitted = [];
-            g.observe(['B']).subscribe(observeValues(emitted));
-
-            g.set(['B'], { $type: 'ref', value: ['D'] });
-            g.set(['B'], { $type: 'ref', value: ['E'] });
-            g.set(['B'], { $type: 'ref', value: ['F'] });
-
-            let valueOfB = g.getSync(['B']);
-            expect(valueOfB).to.equal('I\'m a monkey');
-
-            expect(emitted.length).to.equal(4);
-            expect(emitted[0].value).to.equal('init');
-            expect(emitted[1].value).to.equal('bye');
-            expect(emitted[2].value).to.equal('in the sky');
-            expect(emitted[3].value).to.equal('I\'m a monkey');
-        });
-
-        it('should emit undefined when a value is deleted.', () => {
-
-            let g = new JsonGraph();
-            g.set([], {
-                D: 'bye',
-                E: 'in the sky',
-                F: 'I\'m a monkey',
-                B: 'init'
-            });
-            let emitted = [];
-            g.observe(['B']).subscribe(observeValues(emitted));
-
-            g.set(['B'], { $type: 'ref', value: ['D'] });
-            g.set(['B'], { $type: 'ref', value: ['E'] });
-            g.set(['B'], { $type: 'ref', value: ['F'] });
-
-            g.delete(['B']);
-
-            expect(emitted.length).to.equal(5);
-            expect(emitted[0].value).to.equal('init');
-            expect(emitted[1].value).to.equal('bye');
-            expect(emitted[2].value).to.equal('in the sky');
-            expect(emitted[3].value).to.equal('I\'m a monkey');
-            expect(emitted[4].value).to.equal(undefined);
-        });
-    });
-
 
     describe('has', () => {
 
@@ -430,4 +279,5 @@ describe('JsonGraph', () => {
             expect(exists).to.equal(false);
         });
     });
+
 });

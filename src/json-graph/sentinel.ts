@@ -16,7 +16,7 @@ export interface ISentinel {
      * Either:
      *  0: This value is expired
      *  1: This value never expires
-     * A unix time: This value is expired when $expires < Date.now();
+     *  >1: A unix time: This value is expired when $expires < Date.now();
      */
     $expires?: number;
 }
@@ -62,4 +62,20 @@ export function pathInvalidation(path) {
         path: path,
         invalidated: true
     };
+}
+
+export function isExpired(value: ISentinel, dateNow: ()=>number) {
+    let $expires = value.$expires;
+    if (typeof $expires !== 'number') {
+        return false;
+    }
+    switch($expires) {
+        case 0:
+            return true;
+        case 1:
+            return false;
+        default:
+            let now = dateNow();
+            return $expires < now;
+    }
 }

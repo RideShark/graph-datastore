@@ -1,4 +1,4 @@
-import { ISentinel, isSentinel } from './sentinel';
+import { isExpired, isSentinel, ISentinel } from './sentinel';
 import {
     cloneDeep
 } from 'lodash';
@@ -113,80 +113,110 @@ export class JsonGraph {
     private _deletedPaths$ = new Subject<{
         path: string[]
     }>();
+    private _pathPrefix: string;
 
     get __data() {
         return this._data;
     }
 
-    constructor() {
+    dateNow() {
+        return Date.now();
+    }
+
+    constructor(pathPrefix: string = '') {
+        this._pathPrefix = pathPrefix;
     }
 
     /**
      * Set a value in the path
      */
-    set(path: any[], value: any) {
-        const p = new Path(path);
+    set(path: any[], value: any, pathPrefix = this._pathPrefix) {
+        const p = this._newPath(path, pathPrefix);
         this._innerSet(p.path, value);
     }
 
+
+    has(path: any[]): any {
+        const p = this._newPath(path);
+        return this._innerGetSync(p.path).exists;
+    }
+
     /**
-     * Set a value in the path
+     * Returns a serialized version of the JsonGraph
      */
     getSync(path: any[], options?: {
+
+        /**
+         * The default value to retrieve
+         */
+        defaultValue?: any;
         /**
          * Whether or not references should be flattened.
          */
         flatten?: boolean;
     }, prefetchedValues?: {[refPath: string]: any}): any {
         const p = new Path(path);
-        let object = this._innerGetSync(p.path);
+        let v = this._innerGetSync(p.path);
 
-        if (options && options.flatten) {
-            if (! prefetchedValues) {
-                prefetchedValues = Object.create(null);
+        let defaultValue = options ? options.defaultValue : undefined;
+
+
+        if (v.isExpired || !v.exists) {
+            return defaultValue;
+        } else {
+            let object = v.value;
+            if (isSentinel(object) && isExpired(object, ()=>this.dateNow())) {
+                return defaultValue;
             }
-            prefetchedValues[this._dereferencePath(p.path).join(PATH_JOINER)] = object;
+            object = this._unbox(object);
+
+            if (options && options.flatten) {
+                if (! prefetchedValues) {
+                    prefetchedValues = Object.create(null);
+                }
+                prefetchedValues[this._dereferencePath(p.path).path.join(PATH_JOINER)] = object;
 
 
-            for (let key in object) {
-                let value = object[key];
-                if (isSentinel(value)) {
-                    if (value.$type === 'ref') {
-                        let dereferencedPath = this._dereferencePath(value.value);
-                        let flattenedPath = dereferencedPath.join(PATH_JOINER);
-                        let referencedValue = prefetchedValues[flattenedPath];
-                        if (!referencedValue) {
-                            referencedValue = this.getSync(dereferencedPath, {
-                                flatten: true
-                            }, prefetchedValues);
-                            if (referencedValue instanceof Array) {
-                                prefetchedValues[flattenedPath] = referencedValue.map(v => {
-                                    if (isSentinel(v) && v.$type === 'ref') {
-                                        return this.getSync(v.value, {flatten: true}, prefetchedValues);
-                                    }
-                                    return v;
-                                });
-                            } else {
-                                prefetchedValues[flattenedPath] = referencedValue;
+                for (let key in object) {
+                    let value = object[key];
+                    if (isSentinel(value)) {
+                        if (value.$type === 'ref') {
+                            let dereferencedPath = this._dereferencePath(value.value).path;
+                            let flattenedPath = dereferencedPath.join(PATH_JOINER);
+                            let referencedValue = prefetchedValues[flattenedPath];
+                            if (!referencedValue) {
+                                referencedValue = this.getSync(dereferencedPath, {
+                                    flatten: true
+                                }, prefetchedValues);
+                                if (referencedValue instanceof Array) {
+                                    prefetchedValues[flattenedPath] = referencedValue.map(v => {
+                                        if (isSentinel(v) && v.$type === 'ref') {
+                                            return this.getSync(v.value, {flatten: true}, prefetchedValues);
+                                        }
+                                        return v;
+                                    });
+                                } else {
+                                    prefetchedValues[flattenedPath] = referencedValue;
+                                }
                             }
+                            object[key] = referencedValue;
+                        } else if (value.$type === 'atom') {
+                            object[key] = value.value;
                         }
-                        object[key] = referencedValue;
-                    } else if (value.$type === 'atom') {
-                        object[key] = value.value;
+                    }
+                    if (value instanceof Array) {
+                        object[key] = value.map(v => {
+                            if (isSentinel(v) && v.$type === 'ref') {
+                                return this.getSync(v.value, {flatten: true}, prefetchedValues);
+                            }
+                            return v;
+                        });
                     }
                 }
-                if (value instanceof Array) {
-                    object[key] = value.map(v => {
-                        if (isSentinel(v) && v.$type === 'ref') {
-                            return this.getSync(v.value, {flatten: true}, prefetchedValues);
-                        }
-                        return v;
-                    });
-                }
+                return object;
+            } else {
+                return object;
             }
-            return object;
-        } else {
-            return object;
         }
     }
 
@@ -210,13 +240,13 @@ export class JsonGraph {
 
             let originalPath = path,
                 setPaths$ = this._setPaths$,
-                dereferencedPath = this._dereferencePath(path);
+                dereferencedPath = this._dereferencePath(path).path;
 
             const pathValuesMatch = (pathValue: string[]) => {
                 const pathsAreExactlyEqual = pathsAreEqual(pathValue, dereferencedPath);
                 if (!pathsAreExactlyEqual) {
-                    let updatedDereferencedPath = this._dereferencePath(pathValue),
-                        nextDereferencedPath = this._dereferencePath(path);
+                    let updatedDereferencedPath = this._dereferencePath(pathValue).path,
+                        nextDereferencedPath = this._dereferencePath(path).path;
                     let pathsAreReferentiallyEqual = pathsAreEqual(updatedDereferencedPath, nextDereferencedPath);
                     return pathsAreReferentiallyEqual;
                 }
@@ -256,15 +286,86 @@ export class JsonGraph {
         });
     }
 
+    serialize(): string {
+        return JSON.stringify(
+            {
+                _data: this.__data,
+                _pathPrefix: this._pathPrefix
+            }
+        );
+    }
+
+    /**
+     * Creates a new JsonGraph from a deserialized string
+     * @param input 
+     */
+    static deserialize(input: string): JsonGraph {
+        let data = JSON.parse(input);
+        if (data) {
+            let d = data._data,
+                p = data._pathPrefix;
+            let g = new JsonGraph(p);
+
+            let theData = Object.create(null);
+            Object.assign(theData, d);
+
+            g._setData(theData);
+
+            return g;
+        } else {
+            throw 'No data'
+        }
+    }
+
+    private _unbox(value: any): any {
+        if (isSentinel(value) && value.$type === 'atom') {
+            return value.value;
+        }
+        return value;
+    }
+
+    private _isExpired(value: any | ISentinel) {
+        if (isSentinel(value)) {
+            return isExpired(value, () => this.dateNow());
+        }
+        return false;
+    }
+
+    private _setData(data: any) {
+        this._data = data;
+    }
+
+    private _newPath(path: any[], pathPrefix = this._pathPrefix) {
+        let p = path;
+        if (pathPrefix) {
+            p = [].concat(pathPrefix).concat(path);
+        }
+        return new Path(p);
+    }
+
     private _innerSet(path: IPath, value: any) {
-        let resolvedPath = this._dereferencePath(path);
+        let deref = this._dereferencePath(path);
+        if (deref.isExpired) {
+            throw 'Path expired';
+        }
+        let resolvedPath = deref.path;
         this._makePath(resolvedPath);
         this._setAtPath(resolvedPath, value);
     }
 
-    private _innerGetSync(path: IPath): any {
-        let resolvedPath = this._dereferencePath(path);
-        return this._getAtPath(resolvedPath);
+    private _innerGetSync(path: IPath): {
+        value: any,
+        exists: boolean,
+        isExpired: boolean
+    } {
+        let deref = this._dereferencePath(path);
+        let isExpired = deref.isExpired;
+        let vals = this._getAtPath(deref.path);
+        return {
+            isExpired: isExpired,
+            value: vals.value,
+            exists: vals.exists
+        }
     }
 
     /**
@@ -272,7 +373,7 @@ export class JsonGraph {
      * @param p The path to delete
      */
     private _innerDelete(path: IPath) {
-        let resolvedPath = this._dereferencePath(path);
+        let resolvedPath = this._dereferencePath(path).path;
         this._deleteAtPath(resolvedPath);
     }
 
@@ -320,18 +421,35 @@ export class JsonGraph {
         }
     }
 
-    private _getAtPath(path: string[]) {
+    private _getAtPath(path: string[]): {
+        exists: boolean;
+        value: any;
+    } {
+        let exists: boolean = true,
+            value: any;
         var p = [].concat(path);
-        let lastCursor: string = p.pop();
         var cursorIndex, cursor = this._data;
         while (cursorIndex = p.shift()) {
             let nextCursor = cursorIndex + '';
             if (cursor[nextCursor]) {
                 cursor = cursor[nextCursor];
+                exists = true;
+            } else {
+                exists = false;
             }
         }
 
-        return cloneDeep(cursor[lastCursor]);
+        if (exists) {
+            return {
+                value: cloneDeep(cursor),
+                exists
+            }
+        } else {
+            return {
+                value: undefined,
+                exists
+            }
+        }
     }
 
     private _deleteAtPath(path: string[]) {
@@ -355,19 +473,27 @@ export class JsonGraph {
     /**
      * Removes all references from a path, allowing simple modifications.
      */
-    private _dereferencePath(path: IPath) {
+    private _dereferencePath(path: IPath): {
+        path: string[];
+        isExpired: boolean;
+    } {
         let p = [].concat(path);
         let cursor: any, cursorIndex: string;
         cursor = this._data;
-
+        const dateNow = () => this.dateNow();
         let completePath: string[] = [];
+        let pathExpired = false;
 
         // Walk down the path until it's completely walked down.
         while (p.length && (cursorIndex = p.shift() + '')) {
             try {
-                let v = cursor[cursorIndex];
+                let v: any | ISentinel = cursor[cursorIndex];
                 // If this is a reference, we are going to walk down a new path
                 if (isSentinel(v) && v.$type === 'ref') {
+                    if (!pathExpired) {
+                        pathExpired = isExpired(v, dateNow);
+                    }
+
                     // Reset the "complete path", we have started anew at the root.
                     completePath = [];
 
@@ -393,7 +519,12 @@ export class JsonGraph {
             }
 
         }
-        return completePath;
+        return {
+            path: completePath,
+            isExpired: pathExpired
+        };
     }
+
+
 
 }

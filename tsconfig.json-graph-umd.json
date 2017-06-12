@@ -1,0 +1,17 @@
+{
+    "version": "2.1.5",
+    "compilerOptions": {
+        "target": "es5",
+        "module": "amd",
+        "declaration": true,
+        "sourceMap": true,
+        "outDir":"json-graph/",
+        "outFile": "json-graph/json-graph.js",
+        "lib": [
+            "es2015"
+        ]
+    },
+    "files": [
+        "./src/json-graph/json-graph.ts"
+    ]
+}
