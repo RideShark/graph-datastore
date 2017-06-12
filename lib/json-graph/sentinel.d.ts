@@ -5,14 +5,14 @@ export interface ISentinel {
     /**
      * Unix time of when this was created
      */
-    $timestamp: number;
+    $timestamp?: number;
     /**
      * Either:
      *  0: This value is expired
      *  1: This value never expires
      * A unix time: This value is expired when $expires < Date.now();
      */
-    $expires: number;
+    $expires?: number;
 }
 export declare function ref(path: string[], props?: any): any;
 export declare function atom(value: any, props: any): any;

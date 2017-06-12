@@ -44,6 +44,12 @@ export interface IObservedPathChange {
      * If the value does not change, but the references do (thereby causing a change)
      * this will be emitted _after_ any refChange changes.
      * 
+     * valueDeleted:
+     * The value was deleted.
+     * 
+     * initialValue:
+     * This is the initial value
+     * 
      * refChange:
      * This is emitted when any referenced values change. 
      * @example
@@ -62,8 +68,8 @@ export interface IObservedPathChange {
      * When the observable is subscribed to, 'pathRemoved' will be emitted.
      * pathRemoved is always the last value in an observable of IObservedPathChange.
      */
-    $type: 'valueChange' | 'refChange' | 'pathRemoved';
-    newValue?: any;
+    $type: 'initialValue' | 'valueChange' | 'valueDeleted' | 'refChange' | 'pathRemoved';
+    value?: any;
 
     refChange?: {
         /**
@@ -96,7 +102,7 @@ export class JsonGraph {
         [joinedPath: string]: {
             [joinedPath: string]: IPath;
         };
-    } = {};
+    } = Object.create(null);
 
 
     private _setPaths$ = new Subject<{
@@ -104,12 +110,15 @@ export class JsonGraph {
         value: any
     }>();
 
+    private _deletedPaths$ = new Subject<{
+        path: string[]
+    }>();
+
     get __data() {
         return this._data;
     }
 
     constructor() {
-        this._data = {};
     }
 
     /**
@@ -123,9 +132,67 @@ export class JsonGraph {
     /**
      * Set a value in the path
      */
-    getSync(path: any[]): any {
+    getSync(path: any[], options?: {
+        /**
+         * Whether or not references should be flattened.
+         */
+        flatten?: boolean;
+    }, prefetchedValues?: {[refPath: string]: any}): any {
         const p = new Path(path);
-        return this._innerGetSync(p.path);
+        let object = this._innerGetSync(p.path);
+
+        if (options && options.flatten) {
+            if (! prefetchedValues) {
+                prefetchedValues = Object.create(null);
+            }
+            prefetchedValues[this._dereferencePath(p.path).join(PATH_JOINER)] = object;
+
+
+            for (let key in object) {
+                let value = object[key];
+                if (isSentinel(value)) {
+                    if (value.$type === 'ref') {
+                        let dereferencedPath = this._dereferencePath(value.value);
+                        let flattenedPath = dereferencedPath.join(PATH_JOINER);
+                        let referencedValue = prefetchedValues[flattenedPath];
+                        if (!referencedValue) {
+                            referencedValue = this.getSync(dereferencedPath, {
+                                flatten: true
+                            }, prefetchedValues);
+                            if (referencedValue instanceof Array) {
+                                prefetchedValues[flattenedPath] = referencedValue.map(v => {
+                                    if (isSentinel(v) && v.$type === 'ref') {
+                                        return this.getSync(v.value, {flatten: true}, prefetchedValues);
+                                    }
+                                    return v;
+                                });
+                            } else {
+                                prefetchedValues[flattenedPath] = referencedValue;
+                            }
+                        }
+                        object[key] = referencedValue;
+                    } else if (value.$type === 'atom') {
+                        object[key] = value.value;
+                    }
+                }
+                if (value instanceof Array) {
+                    object[key] = value.map(v => {
+                        if (isSentinel(v) && v.$type === 'ref') {
+                            return this.getSync(v.value, {flatten: true}, prefetchedValues);
+                        }
+                        return v;
+                    });
+                }
+            }
+            return object;
+        } else {
+            return object;
+        }
+    }
+
+    delete(path: any[]) {
+        const p = new Path(path);
+        this._innerDelete(p.path);
     }
 
     /**
@@ -133,32 +200,59 @@ export class JsonGraph {
      * @param path The path to observe
      */
     observe(path: any[]): Observable<IObservedPathChange> {
-        return new Observable<IObservedPathChange>((subscriber: Subscriber<IObservedPathChange>)=>{
+        return new Observable<IObservedPathChange>((subscriber: Subscriber<IObservedPathChange>) => {
+
+            let initialValue = this.getSync(path);
+            subscriber.next({
+                $type: 'initialValue',
+                value: initialValue
+            });
 
             let originalPath = path,
                 setPaths$ = this._setPaths$,
                 dereferencedPath = this._dereferencePath(path);
 
-                
+            const pathValuesMatch = (pathValue: string[]) => {
+                const pathsAreExactlyEqual = pathsAreEqual(pathValue, dereferencedPath);
+                if (!pathsAreExactlyEqual) {
+                    let updatedDereferencedPath = this._dereferencePath(pathValue),
+                        nextDereferencedPath = this._dereferencePath(path);
+                    let pathsAreReferentiallyEqual = pathsAreEqual(updatedDereferencedPath, nextDereferencedPath);
+                    return pathsAreReferentiallyEqual;
+                }
+                return pathsAreExactlyEqual;
+            };
 
-
-                let subsc = setPaths$
-                .filter(o=>pathsAreEqual(o.path, dereferencedPath))
-                .subscribe(next=>{
+            let subsc = setPaths$
+                .filter(o => pathValuesMatch(o.path))
+                .subscribe(next => {
                     subscriber.next({
                         $type: 'valueChange',
-                        newValue: next.value
+                        value: next.value
                     });
-                }, err=>{
+                }, err => {
                     subscriber.error(err);
-                }, ()=>{
+                }, () => {
                 });
 
-                return {
-                    unsubscribe() {
-                        subsc.unsubscribe();
-                    }
-                };
+            let subscd = this._deletedPaths$
+                .filter(o => pathValuesMatch(o.path))
+                .subscribe(next => {
+                    subscriber.next({
+                        $type: 'valueChange',
+                        value: undefined
+                    });
+                }, err => {
+                    subscriber.error(err);
+                }, () => {
+                });
+
+            return {
+                unsubscribe() {
+                    subsc.unsubscribe();
+                    subscd.unsubscribe();
+                }
+            };
         });
     }
 
@@ -168,9 +262,18 @@ export class JsonGraph {
         this._setAtPath(resolvedPath, value);
     }
 
-    private _innerGetSync(path: IPath) : any {
+    private _innerGetSync(path: IPath): any {
         let resolvedPath = this._dereferencePath(path);
         return this._getAtPath(resolvedPath);
+    }
+
+    /**
+     * Delete a path
+     * @param p The path to delete
+     */
+    private _innerDelete(path: IPath) {
+        let resolvedPath = this._dereferencePath(path);
+        this._deleteAtPath(resolvedPath);
     }
 
     private _makePath(path: string[]) {
@@ -199,18 +302,22 @@ export class JsonGraph {
                 cursor = cursor[nextCursor];
             }
         }
-        
+
         cursor[lastCursor] = value;
 
-
         if (isSentinel(value) && value.$type === 'ref') {
-            this._trackRef(path, value);
+            // Todo: Make this async.
+            let valueToEmit = this.getSync(value.value);
+            this._setPaths$.next({
+                path,
+                value: valueToEmit
+            });
+        } else {
+            this._setPaths$.next({
+                path,
+                value
+            });
         }
-
-        this._setPaths$.next({
-            path,
-            value
-        });
     }
 
     private _getAtPath(path: string[]) {
@@ -225,6 +332,24 @@ export class JsonGraph {
         }
 
         return cloneDeep(cursor[lastCursor]);
+    }
+
+    private _deleteAtPath(path: string[]) {
+        var p = [].concat(path);
+        let lastCursor: string = p.pop();
+        var cursorIndex, cursor = this._data;
+        while (cursorIndex = p.shift()) {
+            let nextCursor = cursorIndex + '';
+            if (cursor[nextCursor]) {
+                cursor = cursor[nextCursor];
+            }
+        }
+
+        delete cursor[lastCursor];
+
+        this._deletedPaths$.next({
+            path
+        });
     }
 
     /**
@@ -258,7 +383,7 @@ export class JsonGraph {
                     // We are going to walk down this new path
                     try {
                         cursor = cursor[cursorIndex];
-                    } catch(e) {
+                    } catch (e) {
                     }
                 }
 
@@ -269,15 +394,6 @@ export class JsonGraph {
 
         }
         return completePath;
-    }
-
-    private _trackRef(path: string[], reference: ISentinel) {
-        let joinedPath = path.join(PATH_JOINER);
-        let pathReferences = this._pathReferences;
-        if (!pathReferences[joinedPath]) {
-            pathReferences[joinedPath] = {};
-        }
-        pathReferences[joinedPath][reference.value.join(PATH_JOINER)] = [].concat(reference.value);
     }
 
 }

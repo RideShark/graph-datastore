@@ -1,4 +1,4 @@
-import { Observable } from 'rxjs/Rx';
+import { Observable } from 'rxjs';
 export declare type IPath = Array<string | boolean | number | null>;
 export declare class Path {
     constructor(keys: any[]);
@@ -15,6 +15,12 @@ export interface IObservedPathChange {
      * This is emitted when the value at the end of the path changes.
      * If the value does not change, but the references do (thereby causing a change)
      * this will be emitted _after_ any refChange changes.
+     *
+     * valueDeleted:
+     * The value was deleted.
+     *
+     * initialValue:
+     * This is the initial value
      *
      * refChange:
      * This is emitted when any referenced values change.
@@ -34,12 +40,8 @@ export interface IObservedPathChange {
      * When the observable is subscribed to, 'pathRemoved' will be emitted.
      * pathRemoved is always the last value in an observable of IObservedPathChange.
      */
-    $type: 'valueChange' | 'refChange';
-    'pathRemoved': any;
-    valueChanged?: {
-        oldValue: any;
-        newValue: any;
-    };
+    $type: 'initialValue' | 'valueChange' | 'valueDeleted' | 'refChange' | 'pathRemoved';
+    value?: any;
     refChange?: {
         /**
          * The path leading up to the point that changed
@@ -57,6 +59,9 @@ export interface IObservedPathChange {
 }
 export declare class JsonGraph {
     private _data;
+    private _pathReferences;
+    private _setPaths$;
+    private _deletedPaths$;
     readonly __data: any;
     constructor();
     /**
@@ -66,18 +71,30 @@ export declare class JsonGraph {
     /**
      * Set a value in the path
      */
-    getSync(path: any[]): any;
+    getSync(path: any[], options?: {
+        /**
+         * Whether or not references should be flattened.
+         */
+        flatten?: boolean;
+    }): any;
+    private _flatten(object, retrievedReferences?);
+    delete(path: any[]): void;
     /**
      * Observe a path change.
      * @param path The path to observe
      */
     observe(path: any[]): Observable<IObservedPathChange>;
-    private _innerObserve(path);
     private _innerSet(path, value);
     private _innerGetSync(path);
+    /**
+     * Delete a path
+     * @param p The path to delete
+     */
+    private _innerDelete(path);
     private _makePath(path);
     private _setAtPath(path, value);
     private _getAtPath(path);
+    private _deleteAtPath(path);
     /**
      * Removes all references from a path, allowing simple modifications.
      */
