@@ -243,7 +243,7 @@ describe('JsonGraph', () => {
             
             let g = new JsonGraph();
 
-            let value = g.getSync([]);
+            let value = g.getSync(['A']);
             expect(value).to.equal(undefined);
 
             value = g.getSync(['D', 3, 3, '3']);

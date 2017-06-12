@@ -3,3 +3,4 @@ json-graph/*.d.ts
 json-graph/json-graph.js
 json-graph/json-graph.js.map
 json-graph/json-graph.package.js
+lib/**/*.js

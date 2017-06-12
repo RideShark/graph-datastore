@@ -431,7 +431,7 @@ export class JsonGraph {
         var cursorIndex, cursor = this._data;
         while (cursorIndex = p.shift()) {
             let nextCursor = cursorIndex + '';
-            if (cursor[nextCursor]) {
+            if (cursor[nextCursor] !== undefined) {
                 cursor = cursor[nextCursor];
                 exists = true;
             } else {
